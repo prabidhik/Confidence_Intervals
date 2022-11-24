@@ -1,0 +1,144 @@
+---
+title: "More on Confidence Intervals"
+author: "Prabidhik KC"
+date: "2022-11-24"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(gov50data)
+library(infer)
+```
+
+```{r}
+trains %>% 
+  group_by(treatment) %>% 
+  summarize(post_mean = mean(numberim.post)) %>% 
+  pivot_wider(
+    names_from = treatment,
+    values_from = post_mean
+  ) %>% 
+  mutate(ATE = `1`-`0`)
+  
+
+```
+```{r}
+ate_boots <- trains %>% 
+  rep_slice_sample(prop = 1, replace = TRUE, reps = 1000) %>% 
+  group_by(replicate, treatment) %>% 
+  summarize(post_mean = mean(numberim.post)) %>% 
+  pivot_wider(
+    names_from = treatment,
+    values_from = post_mean
+  ) %>% 
+  mutate(ATE = `1`-`0`)
+
+ate_boots
+```
+
+```{r}
+ate_boots %>% 
+  ggplot(mapping = aes(x = ATE, y = ..density..)) +
+  geom_histogram(binwidth = 0.05)
+```
+
+```{r}
+ate_ci_95 <- ate_boots %>% 
+  select(replicate, ATE) %>% 
+  get_confidence_interval(level = 0.95, type = "percentile")
+
+ate_ci_95
+```
+```{r}
+
+trains
+change_ci_95 <- trains %>% 
+  rep_slice_sample(prop = 1, replace = TRUE, reps = 1000) %>% 
+  select(treatment)
+  summarize(change_mean = mean(numberim.post-numberim.pre)) %>% 
+  pivot_wider(
+    names_from = treatment,
+    values_from = post_mean
+  ) %>% 
+  mutate(ATE = `1`-`0`)
+
+change_ci_95
+```
+```{r}
+ate_ci_95[2] - ate_ci_95[1]
+```
+
+```{r}
+trains %>% 
+  summarize(
+    sd(numberim.post),
+    sd(numberim.post -numberim.pre)
+  )
+```
+```{r}
+ate_boots_infer <- trains %>% 
+  mutate(treatment = if_else(treatment == 1, "Treated", "Control")) %>% 
+  specify(numberim.post ~ treatment) %>% 
+  generate(reps = 1000, type = "bootstrap") %>% 
+  calculate(stat = "diff in means", order = c("Treated", "Control")) %>% 
+  get_ci(level = 0.95, type = "percentile")
+
+ate_boots_infer
+```
+```{r}
+boots <- trains %>% 
+  mutate(
+    treatment = if_else(treatment == 1, "Treated", "Control"),
+    college = if_else(college == 1, "College", "NonCollege")
+  ) %>% 
+  group_by(treatment, college) %>% 
+  summarize(post_mean = mean(numberim.post)) %>% 
+  pivot_wider(
+    names_from = c(treatment, college),
+    values_from = post_mean
+  )  %>% 
+  mutate(
+    ATE_c = Treated_College - Control_College,
+    ATE_nc = Treated_NonCollege - Control_NonCollege,
+    interaction = ATE_c - ATE_nc
+  ) %>% 
+  select(ATE_c, ATE_nc, interaction)
+
+
+
+boots
+```
+
+```{r}
+boots_rep <- trains %>% 
+  mutate(
+    treatment = if_else(treatment == 1, "Treated", "Control"),
+    college = if_else(college == 1, "College", "NonCollege")
+  ) %>% 
+  rep_slice_sample(prop = 1, replace = TRUE, reps = 999) %>% 
+  group_by(replicate, treatment, college) %>% 
+  summarize(post_mean = mean(numberim.post)) %>% 
+  pivot_wider(
+    names_from = c(treatment, college),
+    values_from = post_mean
+  )  %>% 
+  mutate(
+    ATE_c = Treated_College - Control_College,
+    ATE_nc = Treated_NonCollege - Control_NonCollege,
+    interaction = ATE_c - ATE_nc
+  ) %>% 
+  select(replicate, interaction) %>% 
+  drop_na() %>% 
+  get_ci(level = 0.95, type = "percentile") 
+
+
+
+
+boots_rep
+```
+
